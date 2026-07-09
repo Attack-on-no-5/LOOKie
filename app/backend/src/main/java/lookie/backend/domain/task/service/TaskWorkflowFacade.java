@@ -277,8 +277,9 @@ public class TaskWorkflowFacade {
         log.debug("[TaskWorkflow] Determining next action for item {}. Status={}", item.getBatchTaskItemId(),
                 item.getStatus());
 
-        // [Fix] DONE 뿐만 아니라 이슈(ISSUE/ISSUE_PENDING) 상태도 해당 아이템 처리는 끝난 것으로 간주
-        if ("DONE".equals(item.getStatus()) || "ISSUE".equals(item.getStatus())
+        // DONE 또는 ISSUE_PENDING(이슈 보류) 상태면 해당 아이템 처리는 끝난 것으로 간주
+        // ('ISSUE'는 V2602071200 FSM 재정의로 제거된 레거시 값이라 참조 삭제)
+        if ("DONE".equals(item.getStatus())
                 || "ISSUE_PENDING".equals(item.getStatus())) {
             int totalPending = taskItemService.countPendingItems(item.getBatchTaskId());
             log.info("[TaskWorkflow] Item Finished ({}). Total pending items for task {}: {}",
