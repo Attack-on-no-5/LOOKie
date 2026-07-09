@@ -56,6 +56,13 @@ public class WorkerMonitoringServiceRedisImpl implements WorkerMonitoringService
     private final ObjectMapper objectMapper;
 
     private static final String AI_ZONE_RISK_KEY = "lookie:control:ai:zone_risk";
+    // :progress 키 TTL — 상위 배치 종료 후 자동 정리 (설계 의도: 종료 24시간 후 만료)
+    private static final long PROGRESS_KEY_TTL_HOURS = 24;
+
+    // 구역 상태(NORMAL/STABLE) 판정 임계값(분). 하드코딩 30을 외부 설정으로 분리.
+    // 이 값이 SQL 사전계산 status를 덮어쓰는 최종 판정값(getZoneOverviews 응답 경로).
+    @org.springframework.beans.factory.annotation.Value("${control.zone-status-threshold-minutes:30}")
+    private int zoneStatusThresholdMinutes;
     private static final double RISK_CRITICAL_MIN = 20000.0;
     private static final double RISK_STABLE_MAX = 1000.0;
 
@@ -288,7 +295,7 @@ public class WorkerMonitoringServiceRedisImpl implements WorkerMonitoringService
             double gap = deadline - eta;
             if (gap < 0) {
                 dto.setStatus("CRITICAL");
-            } else if (gap <= 30) {
+            } else if (gap <= zoneStatusThresholdMinutes) {
                 dto.setStatus("NORMAL");
             } else {
                 dto.setStatus("STABLE");
@@ -506,6 +513,8 @@ public class WorkerMonitoringServiceRedisImpl implements WorkerMonitoringService
             data.put("progressRate", String.valueOf(progressRate));
 
             stringRedisTemplate.opsForHash().putAll(progressKey, data);
+            // 상위 배치 종료 후에도 무한 잔존하지 않도록 24시간 TTL 설정 (설계 의도 반영)
+            stringRedisTemplate.expire(progressKey, PROGRESS_KEY_TTL_HOURS, TimeUnit.HOURS);
 
             // Overview ?ㅼ뿉??吏꾪뻾瑜?諛섏쁺 (Cache-Aside 濡쒖쭅怨??명솚???좎?)
             // 李멸퀬: WorkerMonitoringService媛 罹먯떆 誘몄뒪 ??DB媛믪쓣 ??뼱?????덉쑝誘濡?Cache-Aside),
