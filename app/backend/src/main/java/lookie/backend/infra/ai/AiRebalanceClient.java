@@ -1,6 +1,5 @@
 package lookie.backend.infra.ai;
 
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import lookie.backend.domain.control.vo.RebalanceSnapshotVO;
 import lookie.backend.infra.ai.dto.RebalanceRecommendRequest;
@@ -8,6 +7,7 @@ import lookie.backend.infra.ai.dto.RebalanceRecommendResponse;
 import lookie.backend.infra.ai.dto.SnapshotRow;
 import lookie.backend.infra.ai.dto.RebalanceRecommendRequest.MoveInput;
 import lookie.backend.domain.control.dto.ZoneMoveRequest;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
@@ -19,13 +19,16 @@ import java.util.stream.Collectors;
 
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class AiRebalanceClient {
 
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate;
 
     @Value("${ai.server.url}")
     private String aiServerUrl;
+
+    public AiRebalanceClient(@Qualifier("aiRestTemplate") RestTemplate restTemplate) {
+        this.restTemplate = restTemplate;
+    }
 
     /**
      * AI ?쒕쾭???щ같移?異붿쿇 ?붿껌
