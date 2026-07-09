@@ -67,24 +67,24 @@ public class TaskItemService {
     public TaskItemVO completeItemManual(Long itemId) {
         TaskItemVO item = taskItemMapper.findById(itemId);
 
-        // 1. 이미 완료되거나 이슈 상태인 경우 체크 (건너뛰기/Pass)
-        // 새 FSM: IN_PROGRESS, ISSUE_PENDING, DONE 상태는 건너뛰기
+        // 1. 이미 완료(DONE)되거나 이슈 보류(ISSUE_PENDING)면 처리 끝난 것으로 간주하고 건너뜀
+        //    (IN_PROGRESS는 완료 대상이므로 여기서 제외 — 기존엔 skip 목록에 있어 아래 3단계와 모순이었음)
         if ("DONE".equals(item.getStatus()) ||
-                "IN_PROGRESS".equals(item.getStatus()) ||
                 "ISSUE_PENDING".equals(item.getStatus())) {
             return item;
         }
 
-        // 2. 수량 충족 여부 체크
+        // 2. 완료는 IN_PROGRESS 상태에서만 가능 (새 FSM: PENDING은 상품 스캔 전이므로 완료 불가)
+        if (!"IN_PROGRESS".equals(item.getStatus())) {
+            throw new IllegalStateException("Item must be IN_PROGRESS to complete");
+        }
+
+        // 3. 수량 충족 여부 체크
         if (!item.getPickedQty().equals(item.getRequiredQty())) {
             throw new ItemQuantityNotSufficientException();
         }
 
-        // 3. 상태 업데이트 (IN_PROGRESS -> DONE)
-        // 새 FSM에서는 IN_PROGRESS 상태에서만 완료 가능
-        if (!"IN_PROGRESS".equals(item.getStatus())) {
-            throw new IllegalStateException("Item must be IN_PROGRESS to complete");
-        }
+        // 4. 상태 업데이트 (IN_PROGRESS -> DONE)
         taskItemMapper.updateStatus(itemId, "DONE");
 
         // 4. 재고 차감 이벤트 발행 (정상 집품 확정)
