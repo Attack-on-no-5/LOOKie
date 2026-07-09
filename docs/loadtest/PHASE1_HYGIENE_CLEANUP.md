@@ -57,12 +57,16 @@
 - 집계: `docs/loadtest/scripts/summarize_baseline.py` → `docs/loadtest/BASELINE_METRICS.md`
 - 대상: `/api/control/summary`, `/zones`, `/zones/{id}/workers`, `/zones/{id}/map`,
   `/workers/{id}/hover`, `/admins?zoneId=1`, `/api/users/me`
-- **상태: 실측 대기** — 실제 수집은 백엔드 스택 기동(+`.env`, 시드 ADMIN 계정 자격증명)이 필요하여 런타임 단계로 이월.
-  스크립트/집계기는 준비 완료. 수집 후 `BASELINE_METRICS.md`에 p50/p95/p99·stddev·min/max·실측 시각 기록 예정.
+- **상태: 실측 완료** — 7개 엔드포인트 각 100회, 전부 100% 2xx. 결과 `BASELINE_METRICS.md`(p50/p95/p99·stddev·min/max·조건),
+  원시 `baseline_raw/*.jsonl`.
 
-## 알려진 전제 / 런타임 의존 항목
+## 런타임 검증 (완료)
 
-- **`.env` 부재**: 저장소에 `.env`가 없어(`.env.example`만, `.gitignore` 등록됨) Docker 스택 기동·baseline 수집·
-  Phase 0 런타임 검증(actuator/targets/grafana 스크린샷)이 아직 수행되지 않음. 코드/설정/문서는 완비, 컴파일 검증 완료.
-- 런타임 검증 체크리스트(수행 시): `curl /actuator/prometheus` → `jvm_memory_used_bytes`,
-  `:9090/targets` `lookie-backend` UP, Grafana 4701 대시보드, `redis-cli TTL :progress` 양수.
+`.env` 확보 후 최소 스택(mysql/redis/backend/prometheus/grafana, backend는 amd64 에뮬레이션) 기동하여 실측 검증 완료.
+상세·근거는 **`RUNTIME_VERIFICATION.md`** 참조.
+
+- Phase 0: `/actuator/prometheus`(application=lookie 태그), `up{job="lookie-backend"}=1`,
+  PromQL `jvm_memory_used_bytes` 조회 성공, Grafana 데이터소스 프로비저닝 + 4701 대시보드 import.
+- 클린업 3: `:progress` 4개 구역 모두 **TTL=86400** 확인.
+- 클린업 5: 임계값 30→250 재기동 시 zone 2/3/4 STABLE→NORMAL 전이, 30 복구 확인.
+- 헤드리스라 Grafana PNG는 미첨부(대시보드 import·URL 존재, UI에서 열람 가능).
