@@ -6,10 +6,14 @@ import lookie.backend.domain.task.exception.ItemQuantityExceededException;
 import lookie.backend.domain.task.exception.ItemQuantityNotSufficientException;
 import lookie.backend.domain.product.exception.ProductNotFoundException;
 import lookie.backend.domain.task.exception.TaskItemNotAssignedException;
+import lookie.backend.domain.task.event.TaskItemRevertedEvent;
 import lookie.backend.domain.task.mapper.TaskItemMapper;
+import lookie.backend.domain.task.mapper.TaskMapper;
 import lookie.backend.domain.task.vo.TaskItemVO;
+import lookie.backend.domain.task.vo.TaskVO;
 import lookie.backend.domain.product.mapper.ProductMapper;
 import lookie.backend.domain.product.vo.ProductVO;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,7 +29,8 @@ public class TaskItemService {
     private final TaskItemMapper taskItemMapper;
     private final ProductMapper productMapper;
     private final InventoryService inventoryService;
-    // Event publishing moved to Facade layer
+    private final TaskMapper taskMapper;
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
      * 상품 바코드 스캔 및 매칭되는 아이템 조회
@@ -178,11 +183,18 @@ public class TaskItemService {
         taskItemMapper.setPickedQty(itemId, 0);
 
         // Redis 집계 정합성을 위해 Reverted 이벤트 발행 (-1 처리)
+        // 호출부가 별도로 발행하지 않아도 되도록 이 메서드에서 자체 발행(단일 책임).
         TaskItemVO item = taskItemMapper.findById(itemId);
         if (item != null) {
-            // Reverted Event logic should be also moved if needed
+            TaskVO task = taskMapper.findById(item.getBatchTaskId());
+            if (task != null) {
+                eventPublisher.publishEvent(new TaskItemRevertedEvent(
+                        item.getBatchTaskItemId(),
+                        item.getBatchTaskId(),
+                        task.getZoneId(),
+                        task.getBatchId()));
+            }
         }
-
     }
 
     /**
