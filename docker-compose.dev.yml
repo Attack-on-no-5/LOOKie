@@ -337,6 +337,42 @@ services:
       ]
     restart: unless-stopped
 
+  # ============================
+  # Prometheus (Phase 0 관측성)
+  # ============================
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    container_name: lookie-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./data/dev/prometheus:/prometheus
+    networks:
+      - lookie
+    restart: unless-stopped
+
+  # ============================
+  # Grafana (Phase 0 관측성)
+  # ============================
+  grafana:
+    image: grafana/grafana:11.1.0
+    container_name: lookie-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - ./data/dev/grafana:/var/lib/grafana
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+    networks:
+      - lookie
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
 # Global volumes section removed as we are using bind mounts now
 
 networks:

@@ -1,8 +1,8 @@
 package lookie.backend.infra.ai;
 
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import lookie.backend.infra.ai.dto.AiAnalysisRequest;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 
 import org.springframework.stereotype.Component;
@@ -10,13 +10,16 @@ import org.springframework.web.client.RestTemplate;
 
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class AiAnalysisClient {
 
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate;
 
     @Value("${ai.server.url}")
     private String aiServerUrl;
+
+    public AiAnalysisClient(@Qualifier("aiRestTemplate") RestTemplate restTemplate) {
+        this.restTemplate = restTemplate;
+    }
 
     /**
      * AI 서버로 분석 요청 (비동기)
