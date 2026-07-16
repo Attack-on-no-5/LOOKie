@@ -476,10 +476,8 @@ public class IssueService {
         // 1. 지번 이동 (MOVE_LOCATION) -> 지번 변경 후 부활
         if ("MOVE_LOCATION".equals(reasonCode)) {
             taskItemService.updateItemLocation(itemId, issue.getNewLocationId());
+            // reviveItem 내부에서 Reverted 이벤트(-1)를 자체 발행하므로 별도 발행 제거(이중 차감 방지)
             taskItemService.reviveItem(itemId);
-
-            // [Event] 부활 시 Redis 집계 차감
-            publishRevertedEvent(issue);
 
             log.info("[IssueService] Item Location Updated & Revived. itemId={}", itemId);
             return;
@@ -489,10 +487,8 @@ public class IssueService {
         // D1(PASS) 케이스: 관리자 사후 확인이 필요하지만(NON_BLOCKING), 작업자는 계속 진행(CONTINUE_PICKING)해야
         // 함.
         if ("PASS".equals(aiDecision) || "AUTO_RESOLVED".equals(reasonCode)) {
+            // reviveItem 내부에서 Reverted 이벤트(-1)를 자체 발행하므로 별도 발행 제거(이중 차감 방지)
             taskItemService.reviveItem(itemId);
-
-            // [Event] 부활 시 Redis 집계 차감
-            publishRevertedEvent(issue);
 
             log.info("[IssueService] Item Revived (PASS/AUTO). itemId={}", itemId);
             return;
@@ -1136,14 +1132,4 @@ public class IssueService {
     /**
      * Redis 집계 차감을 위한 Reverted 이벤트 발행 보조 메서드
      */
-    private void publishRevertedEvent(IssueVO issue) {
-        TaskVO task = taskMapper.findById(issue.getBatchTaskId());
-        if (task != null) {
-            eventPublisher.publishEvent(new TaskItemRevertedEvent(
-                    issue.getBatchTaskItemId(),
-                    issue.getBatchTaskId(),
-                    task.getZoneId(),
-                    task.getBatchId()));
-        }
-    }
 }

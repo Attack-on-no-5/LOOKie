@@ -65,11 +65,6 @@ public interface WorkerMonitoringService {
     List<AdminResponseDto> getAdmins(Long zoneId, String name);
 
     /**
-     * 작업 완료 시 해당 구역의 진행률을 증가시킴 (Redis 갱신)
-     */
-    void incrementZoneProgress(Long zoneId, Long batchId);
-
-    /**
      * ?묒뾽???댁쟾 ?곌낵???곗씠??(諛곗튂 泥섎━ ?꾨룞) 援ъ뿭 ???곹깭???꾪솴
      *
      * @param request 이동 예정 작업자 목록

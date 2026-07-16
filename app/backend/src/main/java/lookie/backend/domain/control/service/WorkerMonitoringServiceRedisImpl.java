@@ -527,32 +527,4 @@ public class WorkerMonitoringServiceRedisImpl implements WorkerMonitoringService
                     zoneId, total, completed, progressRate);
         }
     }
-
-    @Override
-    public void incrementZoneProgress(Long zoneId, Long batchId) {
-        // Lazy initialization check
-        ensureRedisInitialized();
-        String progressKey = "lookie:control:zone:" + zoneId + ":progress";
-
-        // 1. completed (?꾨즺 ?섎웾) atomic 利앷?
-        stringRedisTemplate.opsForHash().increment(progressKey, "completed", 1);
-
-        // 2. 吏꾪뻾瑜??ш퀎??(鍮꾩썝?먯쟻?댁?留?洹쇱궗移?OK)
-        Map<Object, Object> data = stringRedisTemplate.opsForHash().entries(progressKey);
-        if (data.containsKey("total")) {
-            try {
-                long total = Long.parseLong(data.get("total").toString());
-                long completed = data.containsKey("completed") ? Long.parseLong(data.get("completed").toString()) : 0;
-
-                double rate = (total > 0) ? (double) completed * 100 / total : 0.0;
-                // ?뚯닔??1?먮━ 諛섏삱由?
-                rate = Math.round(rate * 10.0) / 10.0;
-
-                stringRedisTemplate.opsForHash().put(progressKey, "progressRate", String.valueOf(rate));
-                log.debug("[Redis] Incremented Progress: zoneId={}, rate={}%", zoneId, rate);
-            } catch (NumberFormatException e) {
-                log.warn("[Redis] Invalid number format during progress update", e);
-            }
-        }
-    }
 }
