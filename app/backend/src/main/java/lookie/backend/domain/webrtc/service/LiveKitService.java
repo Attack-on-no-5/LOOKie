@@ -98,13 +98,20 @@ public class LiveKitService {
                 }
                 throw e;
             }
+        } else {
+            // 명시적 지정도 원자 예약(SETNX)으로 1:1 보장
+            if (!reserveManager(calleeId)) {
+                // 예약 실패 사유(BUSY/AWAY/PAUSED)를 구체적 에러로 변환 (상태 없으면 generic BUSY)
+                validateUserAvailable(calleeId);
+                throw new ApiException(ErrorCode.WEBRTC_MANAGER_BUSY);
+            }
         }
 
         // Lambda에서 사용하기 위한 final 변수
         final Long resolvedCalleeId = calleeId;
 
-        // 기존 로직 (resolvedCalleeId 사용)
-        validateUserAvailable(resolvedCalleeId);
+        // 관리자 예약은 selectAvailableManager/reserveManager 에서 원자적으로 확정됨
+        // (기존 validateUserAvailable read-then-check 는 setUserBusy write 와 비원자 → 중복 배정 원인, 제거)
         String roomName = generateRoomName(request.getCallerId(), resolvedCalleeId);
 
         CallHistoryVO call = CallHistoryVO.builder()
@@ -117,7 +124,7 @@ public class LiveKitService {
                 .build();
 
         callHistoryMapper.save(call);
-        setUserBusy(resolvedCalleeId);
+        // 관리자 예약은 위 selection 단계에서 SETNX로 원자 확정됨 (setUserBusy 비원자 set 제거)
         String token = generateToken(request.getCallerId().toString(), roomName);
 
         // [Refactored] Single Payload Generation
@@ -288,9 +295,8 @@ public class LiveKitService {
         // 동시성 이슈 방지를 위한 재시도 로직 (3회)
         for (int attempt = 0; attempt < 3; attempt++) {
             try {
-                Long managerId = selectAvailableManager(workerId);
-                validateUserAvailable(managerId); // 재검증
-                return managerId;
+                // selectAvailableManager 가 원자 예약(SETNX)까지 확정 → 별도 재검증 불필요
+                return selectAvailableManager(workerId);
             } catch (ApiException e) {
                 if (attempt == 2) {
                     // 마지막 시도 실패 시 예외 발생
@@ -353,14 +359,32 @@ public class LiveKitService {
                     "현재 가용한 관리자가 없습니다. 잠시 후 다시 시도해주세요.");
         }
 
-        // 4. Random 선택 (1:1 제약 준수)
+        // 4. Random 순서로 후보를 돌며 원자 예약(SETNX) 성공한 첫 관리자를 확정 (1:1 제약)
         Collections.shuffle(availableManagers);
-        Long selectedManagerId = availableManagers.get(0).getUserId();
+        for (UserVO manager : availableManagers) {
+            Long candidateId = manager.getUserId();
+            if (reserveManager(candidateId)) {
+                log.info("[자동선택] Worker {} → Manager {} 예약 성공 (Zone: {}, 가용후보: {}/{})",
+                        workerId, candidateId, zoneId, availableManagers.size(), managers.size());
+                return candidateId;
+            }
+        }
 
-        log.info("[자동선택] Worker {} → Manager {} (Zone: {}, 가용: {}/{})",
-                workerId, selectedManagerId, zoneId, availableManagers.size(), managers.size());
+        // 모든 후보가 동시 예약 경합에서 밀림 → 재시도 루프가 처리
+        throw new ApiException(ErrorCode.WEBRTC_MANAGER_BUSY,
+                "현재 가용한 관리자가 없습니다. 잠시 후 다시 시도해주세요.");
+    }
 
-        return selectedManagerId;
+    /**
+     * 관리자 원자 예약 (SETNX + TTL).
+     * setIfAbsent 로 키가 없을 때만 BUSY 로 선점 → 동시 요청 중 정확히 1건만 성공한다.
+     * 기존 setUserBusy(비원자 set)의 check-then-act 경합(동일 관리자 중복 배정)을 제거하는 핵심.
+     */
+    private boolean reserveManager(Long userId) {
+        String key = RedisKeyConstants.USER_STATUS_KEY + userId;
+        Boolean acquired = redisTemplate.opsForValue()
+                .setIfAbsent(key, STATUS_BUSY, 10, TimeUnit.MINUTES);
+        return Boolean.TRUE.equals(acquired);
     }
 
     /**
@@ -407,11 +431,6 @@ public class LiveKitService {
                     throw new ApiException(ErrorCode.WEBRTC_MANAGER_BUSY);
             }
         }
-    }
-
-    private void setUserBusy(Long userId) {
-        String key = RedisKeyConstants.USER_STATUS_KEY + userId;
-        redisTemplate.opsForValue().set(key, STATUS_BUSY, 10, TimeUnit.MINUTES);
     }
 
     private void clearUserStatus(Long userId) {
